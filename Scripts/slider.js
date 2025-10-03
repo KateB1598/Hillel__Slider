@@ -1,142 +1,202 @@
-let currentSlide = 0;
-let totalSlides = 5;
-let isPlaying = true;
-let autoTimer = null;
-let progressTimer = null;
+class Slider {
+  constructor(container, option = {}) {
+    this.container = container;
+    this.slidesElements = this.container.querySelectorAll(".slide");
+    this.totalSlides = this.slidesElements.length;
 
-const SLIDER_TIME = 4000;
+    this.config = {
+      autoplay: true,
+      duration: 4000,
+      ...this.getDataConfig(),
+      ...option,
+    };
 
-const slides = document.querySelector("#slides");
-const indicators = document.querySelector("#indicators");
-const progress = document.querySelector("#progress");
-const playText = document.querySelector("#playText");
+    this.currentSlide = 0;
+    this.isPlaying = this.config.autoplay;
+    this.autoTime = null;
+    this.progressTimer = null;
 
-const nextSlide = () => {
-  currentSlide = currentSlide + 1;
-  if (currentSlide >= totalSlides) {
-    currentSlide = 0;
-  }
-  updateSlider();
-  resetAutoplay();
-};
+    this.slides = this.container.querySelector(".slides");
+    this.indicators = this.container.querySelector(".indicators");
+    this.progress = this.container.querySelector(".progress");
+    this.playText = this.container.querySelector("#playText");
 
-const prevSlide = () => {
-  currentSlide = currentSlide - 1;
-  if (currentSlide < 0) {
-    currentSlide = totalSlides - 1;
-  }
-  updateSlider();
-  resetAutoplay();
-};
-
-const goToSlide = (slideIndex) => {
-  currentSlide = slideIndex;
-  updateSlider();
-  resetAutoplay();
-};
-
-const updateSlider = () => {
-  const moveDistance = -currentSlide * 100;
-  slides.style.transform = `translateX(${moveDistance}%)`;
-  const allIndicators = indicators.querySelectorAll(".indicator");
-
-  allIndicators.forEach((item, index) => {
-    if (index === currentSlide) {
-      item.classList.add("active");
-    } else {
-      item.classList.remove("active");
+    if (!this.slides || !this.totalSlides) {
+      console.error("no slides");
+      return;
     }
-  });
-};
 
-const togglePlay = () => {
-  if (isPlaying) {
-    stopAutoPlay();
-    isPlaying = false;
-    playText.textContent = "Play";
-  } else {
-    startAutoPlay();
-    isPlaying = true;
-    playText.textContent = "Pause";
+    this.init();
   }
-};
-const startAutoPlay = () => {
-  autoTimer = setInterval(() => {
-    nextSlide();
-  }, SLIDER_TIME);
 
-  startProgressBar();
-};
-
-const stopAutoPlay = () => {
-  if (autoTimer) {
-    clearInterval(autoTimer);
-    autoTimer = null;
-  }
-  stopProgressBar();
-};
-
-const resetAutoplay = () => {
-  if (isPlaying) {
-    stopAutoPlay();
-    startAutoPlay();
-  }
-};
-const startProgressBar = () => {
-  let startTime = Date.now();
-
-  const updateProgress = () => {
-    if (!isPlaying) return;
-    const elapsed = Date.now() - startTime;
-    const progressPercent = (elapsed / SLIDER_TIME) * 100;
-
-    if (progressPercent >= 100) {
-      progress.style.width = "100%";
-      setTimeout(() => {
-        progress.style.width = "0%";
-        startTime = Date.now();
-      }, 100);
-    } else {
-      progress.style.width = `${progressPercent}%`;
+  getDataConfig() {
+    const config = this.container.getAttribute("data-slider-config");
+    try {
+      return config ? JSON.parse(config) : {};
+    } catch (error) {
+      console.log("Parse data config error");
+      return {};
     }
-    progressTimer = requestAnimationFrame(updateProgress);
-  };
-  updateProgress();
-};
-const stopProgressBar = () => {
-  if (progressTimer) {
-    cancelAnimationFrame(progressTimer);
-    progressTimer = null;
   }
-  progress.style.width = "0%";
-};
 
-const handleKeyboard = (event) => {
-  switch (event.key) {
-    case "ArrowLeft":
-      prevSlide();
-      break;
-    case "ArrowRight":
-      nextSlide();
-      break;
-    case " ":
-      togglePlay();
-      break;
+  init() {
+    this.createIndicators();
+    this.bindEvents();
+    this.updateSlide();
+    if (this.isPlaying) {
+      this.startAutoPlay();
+    }
+    this.updatePlayButton();
   }
-};
-const createIndicators = () => {
-  for (let i = 0; i < totalSlides; i++) {
-    const dot = document.createElement("button");
-    dot.classList.add("indicator");
-    dot.onclick = () => goToSlide(i);
-    indicators.appendChild(dot);
-  }
-};
 
-const initSlider = () => {
-  createIndicators();
-  updateSlider();
-  startAutoPlay();
-  document.addEventListener("keydown", handleKeyboard);
-};
-document.addEventListener("DOMContentLoaded", initSlider);
+  createIndicators() {
+    if (!this.indicators) return;
+    this.indicators.innerHTML = "";
+
+    for (let i = 0; i < this.totalSlides; i++) {
+      const indicator = document.createElement("button");
+      indicator.classList.add("indicator");
+      indicator.setAttribute("data-slide", i);
+      indicator.addEventListener("click", () => this.goToSlide(i));
+      this.indicators.appendChild(indicator);
+    }
+  }
+  prevSlide() {
+    this.currentSlide =
+      this.currentSlide === 0 ? this.totalSlides - 1 : this.currentSlide - 1;
+    this.updateSlide();
+    this.resetAutoPlay();
+  }
+  nextSlide() {
+    this.currentSlide =
+      this.currentSlide === this.totalSlides - 1 ? 0 : this.currentSlide + 1;
+    this.updateSlide();
+    this.resetAutoPlay();
+  }
+  goToSlide(index) {
+    this.currentSlide = index;
+    this.updateSlide();
+    this.resetAutoPlay();
+  }
+
+  updatePlayButton() {
+    if (this.playText) {
+      this.playText.textContent = this.isPlaying ? "Pause" : "Play";
+    }
+  }
+  togglePlay() {
+    this.isPlaying = !this.isPlaying;
+
+    if (this.isPlaying) {
+      this.startAutoPlay();
+    } else {
+      this.stopAutoPlay();
+    }
+    this.updatePlayButton();
+  }
+
+  bindEvents() {
+    this.container.addEventListener("click", (event) => {
+      const action = event.target.getAttribute("data-action");
+      switch (action) {
+        case "prev":
+          this.prevSlide();
+          break;
+        case "next":
+          this.nextSlide();
+          break;
+        case "toggle":
+          this.togglePlay();
+          break;
+      }
+    });
+    this.container.addEventListener("keydown", (event) => {
+      switch (event.key) {
+        case "ArrowLeft":
+          this.prevSlide();
+          break;
+        case "ArrowRight":
+          this.nextSlide();
+          break;
+        case " ":
+          this.togglePlay();
+          break;
+      }
+    });
+  }
+
+  updateSlide() {
+    const translateX = -this.currentSlide * 100;
+    if (this.slides) {
+      this.slides.style.transform = `translateX(${translateX}%)`;
+    }
+
+    if (this.indicators) {
+      const indicators = this.indicators.querySelectorAll(".indicator");
+      indicators.forEach((indicator, index) => {
+        indicator.classList.toggle("active", index === this.currentSlide);
+      });
+    }
+  }
+
+  startProgressBar() {
+    if (!this.progress) return;
+
+    let startTime = Date.now();
+
+    const updateProgress = () => {
+      if (!this.isPlaying) return;
+
+      const elapsed = Date.now() - startTime;
+      const progressPercent = (elapsed / this.config.duration) * 100;
+
+      if (progressPercent >= 100) {
+        this.progress.style.width = "100%";
+        setTimeout(() => {
+          this.progress.style.width = "0%";
+          startTime = Date.now();
+        }, 100);
+      } else {
+        this.progress.style.width = `${progressPercent}%`;
+      }
+      this.progressTimer = requestAnimationFrame(updateProgress);
+    };
+    updateProgress();
+  }
+  startAutoPlay() {
+    if (!this.config.autoplay) return;
+
+    this.autoTime = setInterval(() => {
+      this.nextSlide();
+    }, this.config.duration);
+    this.startProgressBar();
+  }
+
+  stopProgressBar() {
+    if (this.progressTimer) {
+      cancelAnimationFrame(this.progressTimer);
+      this.progressTimer = null;
+    }
+    this.progress.style.width = "0%";
+  }
+  stopAutoPlay() {
+    if (this.autoTime) {
+      clearInterval(this.autoTime);
+      this.autoTime = null;
+    }
+    this.stopProgressBar();
+  }
+  resetAutoPlay() {
+    if (this.isPlaying) {
+      this.stopAutoPlay();
+      this.startAutoPlay();
+    }
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const sliderContsiner = document.querySelector(".slider-container");
+  if (sliderContsiner) {
+    new Slider(sliderContsiner);
+  }
+});
